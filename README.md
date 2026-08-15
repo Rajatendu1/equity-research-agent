@@ -89,6 +89,14 @@ Run tests:
 npm test
 ```
 
+Check that GitHub/local HEAD matches the deployed live app:
+
+```bash
+npm run check:live-sync
+```
+
+The live app exposes `/api/version`, generated at build time. GitHub Actions runs the same sync check hourly and on demand so deployment drift is visible quickly. If it fails, build, save, and deploy the latest tested commit to Sites before calling the release complete.
+
 ## Environment Variables
 
 The app can run deterministic analysis without AI, but AI narrative generation expects:
@@ -127,6 +135,7 @@ Result:
 - Sites artifact validation passed.
 - 5 tests passed.
 - 0 tests failed.
+- Live sync check available via `npm run check:live-sync`.
 
 ## Latest Product Iteration
 
