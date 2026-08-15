@@ -19,6 +19,7 @@ if [[ ! -x "${vinext}" ]]; then
 fi
 
 echo "Running bounded vinext build..."
+"${script_dir}/write-build-info.sh"
 timeout \
   --signal=TERM \
   --kill-after="${SITES_BUILD_KILL_AFTER:-10s}" \
