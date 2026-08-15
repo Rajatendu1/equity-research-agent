@@ -1,0 +1,1 @@
+ALTER TABLE `research_snapshots` ADD `evidence_json` text DEFAULT '{}' NOT NULL;
