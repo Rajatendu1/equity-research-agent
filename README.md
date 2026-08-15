@@ -128,6 +128,13 @@ Result:
 - 5 tests passed.
 - 0 tests failed.
 
+## Latest Product Iteration
+
+- Stabilized Watchtower evidence review by replacing DOM-level click handlers with React state.
+- Fresh evidence refreshes now save dated snapshots, making repeated scans comparable over time.
+- Added a clear Evidence diff action beside Review so thesis review and source-change review are separate user flows.
+- Preserved fresh-clone build reliability by ensuring project shell scripts are executable.
+
 ## Roadmap
 
 - Add richer primary-source evidence from annual reports, exchange filings, and earnings calls.
