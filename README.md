@@ -134,6 +134,7 @@ Result:
 - Fresh evidence refreshes now save dated snapshots, making repeated scans comparable over time.
 - Added a clear Evidence diff action beside Review so thesis review and source-change review are separate user flows.
 - Preserved fresh-clone build reliability by ensuring project shell scripts are executable.
+- Added the first Portfolio command centre pass inside Watchtower with owned-idea return read, review burden, and concentration prompts.
 
 ## Roadmap
 
