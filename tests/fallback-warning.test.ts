@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { nvidiaFallbackWarning } from "../app/api/analyze/fallback-warning.ts";
+import {
+  analysisFailureMessage,
+  errorCategory,
+  errorStatus,
+  nvidiaFallbackWarning,
+  safeErrorLog,
+  safeErrorReason,
+} from "../app/api/analyze/fallback-warning.ts";
+
+const KEY = "nvapi-AbCdEf0123456789SECRETKEY";
 
 test("fallback warning carries the provider failure reason", () => {
   const warning = nvidiaFallbackWarning(
@@ -28,10 +37,10 @@ test("non-Error failures degrade to a generic reason", () => {
 test("401 errors must not leak an echoed API key (bearer header)", () => {
   const warning = nvidiaFallbackWarning(
     new Error(
-      "401 Unauthorized from https://integrate.api.nvidia.com/v1/chat/completions: Authorization: Bearer nvapi-AbCdEf0123456789SECRETKEY",
+      `401 Unauthorized from https://integrate.api.nvidia.com/v1/chat/completions: Authorization: Bearer ${KEY}`,
     ),
   );
-  assert.ok(!warning.includes("nvapi-AbCdEf0123456789SECRETKEY"));
+  assert.ok(!warning.includes(KEY));
   assert.ok(!warning.includes("Bearer nvapi"));
   assert.match(warning, /\[redacted\]/);
   assert.match(warning, /401 Unauthorized/);
@@ -77,4 +86,55 @@ test("ordinary failure reasons pass through readable and unredacted", () => {
   );
   assert.match(warning, /aborted due to timeout after 10000ms/);
   assert.ok(!warning.includes("[redacted"));
+});
+
+test("errorCategory classifies allowlisted failure kinds", () => {
+  assert.equal(errorCategory(new Error("The operation was aborted due to timeout")), "timeout");
+  assert.equal(errorCategory(new Error("401 Unauthorized: invalid api key")), "auth");
+  assert.equal(errorCategory(new Error("429 too many requests")), "rate_limit");
+  assert.equal(errorCategory(new Error("502 bad gateway from upstream")), "provider_5xx");
+  assert.equal(errorCategory(new Error("fetch failed: ENOTFOUND host")), "network");
+  assert.equal(errorCategory(new Error("something odd happened")), "unknown");
+});
+
+test("errorStatus extracts a status code only when present", () => {
+  assert.equal(errorStatus(new Error("provider error (401): invalid api key")), 401);
+  assert.equal(errorStatus(new Error("aborted due to timeout after 10000ms")), null);
+});
+
+test("safeErrorLog never includes raw credential material", () => {
+  const line = safeErrorLog(
+    "AI narrative unavailable",
+    new Error(`401 Unauthorized: Authorization: Bearer ${KEY}`),
+  );
+  assert.ok(!line.includes(KEY));
+  assert.ok(!line.includes("Bearer nvapi"));
+  assert.match(line, /^AI narrative unavailable: category=auth status=401 reason=/);
+  assert.match(line, /\[redacted\]/);
+});
+
+test("safeErrorLog keeps timeouts diagnosable without secrets", () => {
+  const line = safeErrorLog("AI narrative unavailable", new Error("aborted due to timeout"));
+  assert.match(line, /category=timeout/);
+  assert.match(line, /aborted due to timeout/);
+});
+
+test("joined multi-model upstream errors are redacted end to end", () => {
+  const joined = new Error(
+    `401 Unauthorized: Bearer ${KEY} | 429 rate limit exceeded | api_key=Ab1234567890secretkey`,
+  );
+  const reason = safeErrorReason(joined);
+  assert.ok(!reason.includes(KEY));
+  assert.ok(!reason.includes("Ab1234567890secretkey"));
+  assert.match(reason, /429 rate limit exceeded/);
+});
+
+test("total-failure client message is safe, bounded and useful", () => {
+  const msg = analysisFailureMessage(new Error(`502 bad gateway: Bearer ${KEY}`));
+  assert.ok(!msg.includes(KEY));
+  assert.match(msg, /^Analysis failed due to an upstream error \(/);
+  assert.match(msg, /Please retry\.$/);
+  assert.ok(msg.length <= 300);
+  const generic = analysisFailureMessage("boom");
+  assert.match(generic, /unknown error/);
 });
