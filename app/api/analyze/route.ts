@@ -3,7 +3,7 @@ import {
   aiReportJsonSchema,
   parseStructuredAnalysis,
 } from "./structured-output";
-import { nvidiaFallbackWarning } from "./fallback-warning";
+import { analysisFailureMessage, nvidiaFallbackWarning, safeErrorLog } from "./fallback-warning";
 
 const aliases: Record<string, string> = {
   "asian paints": "ASIANPAINT",
@@ -1239,7 +1239,7 @@ export async function POST(request: Request) {
     try {
       aiResult = await requestAnalysis(prompt);
     } catch (error) {
-      console.warn("AI narrative unavailable:", error);
+      console.warn(safeErrorLog("AI narrative unavailable", error));
       aiResult = {
         parsed: deterministicReport(
           facts,
@@ -1298,9 +1298,7 @@ export async function POST(request: Request) {
       snapshotId: `${slug}:${priceAsOf ?? "unknown"}`,
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Analysis failed." },
-      { status: 502 },
-    );
+    console.error(safeErrorLog("Analysis failed", e));
+    return NextResponse.json({ error: analysisFailureMessage(e) }, { status: 502 });
   }
 }
