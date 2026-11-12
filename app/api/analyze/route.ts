@@ -3,6 +3,7 @@ import {
   aiReportJsonSchema,
   parseStructuredAnalysis,
 } from "./structured-output";
+import { nvidiaFallbackWarning } from "./fallback-warning";
 
 const aliases: Record<string, string> = {
   "asian paints": "ASIANPAINT",
@@ -1237,7 +1238,8 @@ export async function POST(request: Request) {
     };
     try {
       aiResult = await requestAnalysis(prompt);
-    } catch {
+    } catch (error) {
+      console.warn("AI narrative unavailable:", error);
       aiResult = {
         parsed: deterministicReport(
           facts,
@@ -1248,9 +1250,7 @@ export async function POST(request: Request) {
           action,
         ),
         model: "vigilant/deterministic-research-v1",
-        warnings: [
-          "NVIDIA analysis was temporarily unavailable. Vigilant returned its evidence-based deterministic report instead; retry later for the AI narrative.",
-        ],
+        warnings: [nvidiaFallbackWarning(error)],
       };
     }
     const priceAsOf = history.at(-1)?.date ?? null;
@@ -1303,4 +1303,4 @@ export async function POST(request: Request) {
       { status: 502 },
     );
   }
-}
+     }
