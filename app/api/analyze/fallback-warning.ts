@@ -1,12 +1,14 @@
 /**
- * Shared helpers for failure text that crosses a trust boundary: the
- * user-facing fallback warning, API error responses, and deployment logs.
+ * Shared helpers for failure text that crosses a trust boundary.
  *
- * Upstream provider errors can echo credentials (Authorization headers,
- * api_key fields, URLs with basic auth, raw key strings). The redaction here
- * is best-effort pattern matching - it reduces accidental disclosure but is
- * not a guarantee, so logs and responses also carry an allowlisted error
- * category/status and never the raw upstream error object.
+ * Public outputs (user-facing warnings, API error responses) are built ONLY
+ * from fixed allowlisted strings plus a numeric status code - arbitrary
+ * upstream error text never appears in them, redacted or not, because
+ * pattern redaction cannot catch an unrecognised short secret.
+ *
+ * Operator logs (safeErrorLog) may retain a redacted, length-bounded reason:
+ * the redaction is best-effort pattern matching, documented as not a
+ * guarantee, and logs stay inside the deployment (operators/log pipelines).
  */
 const REDACTIONS: Array<[RegExp, string]> = [
   // Authorization headers / bearer tokens.
@@ -30,7 +32,10 @@ export function redactSecretMaterial(text: string): string {
   return out;
 }
 
-/** Redacted, whitespace-normalised, length-bounded reason. Best-effort. */
+/**
+ * Redacted, whitespace-normalised, length-bounded reason. Best-effort only:
+ * use in operator logs, never in public responses.
+ */
 export function safeErrorReason(error: unknown, maxLength = 220): string {
   const raw = error instanceof Error && error.message ? error.message : "unknown error";
   return redactSecretMaterial(raw).replace(/\s+/g, " ").slice(0, maxLength);
@@ -68,10 +73,26 @@ export function errorStatus(error: unknown): number | null {
   return match ? Number(match[1]) : null;
 }
 
+/** Fixed, allowlisted public explanation per category - no upstream text. */
+const PUBLIC_REASONS: Record<ErrorCategory, string> = {
+  auth: "the AI provider rejected the request (authentication failed)",
+  rate_limit: "the AI provider rate limit was reached",
+  timeout: "the AI provider request timed out",
+  provider_5xx: "the AI provider had a server error",
+  network: "the AI provider could not be reached",
+  unknown: "an unexpected provider error occurred",
+};
+
+/** Public-safe detail: fixed allowlisted string plus numeric status only. */
+export function publicErrorDetail(error: unknown): string {
+  const status = errorStatus(error);
+  return `${PUBLIC_REASONS[errorCategory(error)]}${status ? ` (status ${status})` : ""}`;
+}
+
 /**
- * Single-line log string with allowlisted metadata and a redacted, bounded
- * reason. Use instead of logging the raw error object: deployment logs are
- * persistent and readable by operators and log pipelines.
+ * Single-line operator log string: allowlisted category/status plus a
+ * best-effort-redacted, bounded reason. The raw error object is never logged.
+ * Not for public responses - the redacted reason is still upstream text.
  */
 export function safeErrorLog(prefix: string, error: unknown): string {
   const category = errorCategory(error);
@@ -81,16 +102,14 @@ export function safeErrorLog(prefix: string, error: unknown): string {
 }
 
 /**
- * Reason text attached to the deterministic-fallback warning when the AI
- * narrative call fails. The fallback keeps the product usable, but a generic
- * "temporarily unavailable" makes a persistent outage indistinguishable from
- * a transient blip - include the bounded, redacted failure detail.
+ * User-facing warning when the AI narrative call fails: fixed category text
+ * and numeric status only - no upstream error text, redacted or otherwise.
  */
 export function nvidiaFallbackWarning(error: unknown): string {
-  return `NVIDIA analysis was temporarily unavailable (${safeErrorReason(error)}). Vigilant returned its evidence-based deterministic report instead; retry later for the AI narrative.`;
+  return `NVIDIA analysis was temporarily unavailable (${publicErrorDetail(error)}). Vigilant returned its evidence-based deterministic report instead; retry later for the AI narrative.`;
 }
 
-/** Safe client-facing message for total analysis failure - no raw upstream text. */
+/** Safe client-facing message for total analysis failure. */
 export function analysisFailureMessage(error: unknown): string {
-  return `Analysis failed due to an upstream error (${safeErrorReason(error)}). Please retry.`;
+  return `Analysis failed due to an upstream error (${publicErrorDetail(error)}). Please retry.`;
 }
